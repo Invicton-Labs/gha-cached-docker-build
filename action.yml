@@ -1,0 +1,144 @@
+name: 'Cached Docker Build'
+description: 'Runs a Docker build using buildx and a GitHub cache.'
+
+inputs:
+  ecr_url:
+    description: 'The URL of the ECR repository to use for the Docker image'
+    required: true
+  build_args:
+    description: 'Build arguments for docker build'
+    required: false
+    default: ''
+  platforms:
+    description: 'A comma-separated list of platforms to build for (e.g. `linux/amd64,linux/arm64,linux/arm/v7`)'
+    required: false
+    default: 'linux/amd64'
+  do_checkout:
+    description: 'Whether or not to checkout the source repository'
+    required: false
+    default: false
+  source_directory:
+    description: "The directory for the source code for the build. If `do_checkout` is `true`, this will be the directory that the repository is checked out to. If `do_checkout` if `false`, this must be the directory where the source code can be found."
+    required: false
+    default: './source-repo/'
+  latest_tag_method:
+    description: '"auto" to add the "latest" tag on all Git tag pushes, "true" to add the "latest" tag to all pushes, or "false" to never use the "latest" tag. Must be "false" (default) for immutable ECR repositories.'
+    required: false
+    default: false
+  debug:
+    description: 'Enable debug logging'
+    required: false
+    default: false
+
+outputs:
+  commit_hash_short:
+    description: "The first 7 characters of the commit hash."
+    value: ${{ steps.prep-vars.outputs.commit_hash_short }}
+  tagged_image:
+    description: "The image name (with tag) for the runtime image that was pushed to ECR."
+    value: ${{ steps.prep-vars.outputs.tagged_image }}
+  ecr_domain:
+    description: "The domain of the ECR registry that the image was pushed to."
+    value: ${{ steps.prep-vars.outputs.ecr_domain }}
+
+runs:
+  using: 'composite'
+  steps:
+    # Checkout the repository that is triggering this action
+    - name: "Checkout ${{ github.ref }}@${{ github.sha }}"
+      if: fromJSON(inputs.do_checkout)
+      uses: actions/checkout@v3
+      with:
+        path: ${{ inputs.source_directory }}
+        submodules: 'recursive'
+
+    # Prepare some variables that will be used later
+    - name: "Prepare Variables"
+      id: prep-vars
+      working-directory: ${{ inputs.source_directory }}
+      shell: bash
+      # We use an "inverse timestamp" (lower values are newer) because the AWS CLI S3 LS command returns the first 1000 items, alphabetically, and we want the newest first
+      # If we used a datetime string or regular Unix timestamp, the oldest (lowest values) would be returned first
+      run: |
+        COMMIT_HASH_SHORT=$(echo "${{ github.sha }}" | head -c7)
+        TAG="${COMMIT_HASH_SHORT}-${{ github.run_id }}-${{ github.run_attempt }}"
+        echo ::set-output name=commit_hash_short::"$COMMIT_HASH_SHORT"
+        echo ::set-output name=ecr_domain::"$( cut -d '/' -f 1 <<< "${{ inputs.ecr_url }}" )"
+        echo ::set-output name=repository_name::"$( cut -d '/' -f 2- <<< "${{ inputs.ecr_url }}" )"
+        echo ::set-output name=tag::"${TAG}"
+        echo ::set-output name=tagged_image::"${{ inputs.ecr_url }}:${TAG}"
+        echo ::set-output name=aws_access_key_id::"$AWS_ACCESS_KEY_ID"
+        echo ::set-output name=aws_secret_access_key::"$AWS_SECRET_ACCESS_KEY"
+
+    # Set up QEMU for multi-architecture builds
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v2
+
+    # Configure Docker BuildX
+    - name: Set up Docker BuildX
+      id: buildx
+      uses: docker/setup-buildx-action@v2
+      with:
+        # Sets `docker build` as an alias to `docker buildx`
+        install: true
+
+    # Login to the ECR repository
+    - name: Login to ECR
+      uses: docker/login-action@v2
+      with:
+        registry: "${{ steps.prep-vars.outputs.ecr_domain }}"
+        username: "${{ steps.prep-vars.outputs.aws_access_key_id }}"
+        password: "${{ steps.prep-vars.outputs.aws_secret_access_key }}"
+
+    # Prepare metadata for the image
+    - name: Docker meta
+      id: docker_meta
+      uses: docker/metadata-action@v4
+      with:
+        # Create both local and remote images
+        images: |
+          ${{ steps.prep--vars.outputs.repository_name }}
+          ${{ inputs.ecr_url }}
+        # Generate Docker tags based on the following events/attributes
+        tags: |
+          type=ref,event=tag
+          type=raw,${{ steps.prep-vars.outputs.tag }}
+        flavor: |
+          latest=${{ inputs.latest_tag_method }}
+
+    - name: Docker Cache
+      id: docker-build
+      uses: actions/cache@v3
+      with:
+        path: /tmp/.buildx-cache
+        key: docker-buildx-${{ github.sha }}
+        restore-keys: |
+          docker-buildx-
+
+    # Build the runtime image
+    - name: Docker Build
+      uses: docker/build-push-action@v3
+      with:
+        # Use the directory that we checked out the source repo to
+        context: ${{ inputs.source_directory }}
+        # Use BuildX as the builder
+        builder: ${{ steps.buildx.outputs.name }}
+        # Push it if it's not a PR
+        push: ${{ github.event_name != 'pull_request' }}
+        # Add tags as computed by the meta action
+        tags: ${{ steps.docker_meta.outputs.tags }}
+        # Add metadata in labels
+        labels: ${{ steps.docker_meta.outputs.labels }}
+        # Set the build args
+        build-args: ${{ inputs.build_args }}
+        # The platforms to build for
+        platforms: ${{ inputs.platforms }}
+        cache-from: type=local,src=/tmp/.buildx-cache
+        cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+    # Update the cache to remove the old content and include the new content
+    - name: Update Cache
+      shell: bash
+      run: |
+        rm -rf /tmp/.buildx-cache
+        mv /tmp/.buildx-cache-new /tmp/.buildx-cacheZ
