@@ -12,7 +12,7 @@ inputs:
     description: 'The password for logging into the repository to use for the Docker image.'
     required: true
   build_args:
-    description: 'Build arguments for docker build'.
+    description: 'Build arguments for docker build.'
     required: false
     default: ''
   platforms:
