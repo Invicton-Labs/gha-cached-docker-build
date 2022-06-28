@@ -30,12 +30,7 @@ inputs:
   latest_tag_method:
     description: '"auto" to add the "latest" tag on all Git tag pushes, "true" to add the "latest" tag to all pushes, or "false" to never use the "latest" tag. Must be "false" (default) for immutable repositories.'
     required: false
-    default: false
-  debug:
-    description: 'Enable debug logging.'
-    required: false
-    default: false
-    
+    default: false    
 
 outputs:
   commit_hash_short:
