@@ -101,8 +101,8 @@ runs:
       with:
         # Create both local and remote images
         images: |
-          ${{ steps.prep-vars.outputs.repository_name }}
-        #  ${{ inputs.image_repository_url }}
+          name=${{ inputs.image_repository_url }},enabled=${{ inputs.image_repository_url != '' }}
+        #  ${{ steps.prep-vars.outputs.repository_name }}
         # Generate Docker tags based on the following events/attributes
         tags: |
           type=ref,event=tag
