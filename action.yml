@@ -128,7 +128,7 @@ runs:
         # Use BuildX as the builder
         builder: ${{ steps.buildx.outputs.name }}
         # Push it if it's not a PR and a remote repository was provided
-        push: ${{ github.event_name != 'pull_request' && inputs.image_repository_url != '' }}
+        push: ${{ github.event_name != 'pull_request' }}
         # Add tags as computed by the meta action
         tags: ${{ steps.docker_meta.outputs.tags }}
         # Add metadata in labels
