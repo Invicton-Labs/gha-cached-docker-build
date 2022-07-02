@@ -84,6 +84,7 @@ runs:
       with:
         # Sets `docker build` as an alias to `docker buildx`
         install: true
+        buildkitd-flags: --debug
 
     # Login to the image repository
     - name: Login to Image Repository
