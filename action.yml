@@ -2,16 +2,16 @@ name: 'Cached Docker Build'
 description: 'Runs a Docker build using buildx and a GitHub cache.'
 
 inputs:
-  image_repository_url:
-    description: 'The URL of the repository to use for the Docker image. Leave as an empty string if you do not want to push an image.'
+  ecr_repository_url:
+    description: 'The URL of the ECR repository to push to.'
     required: false
     default: ''
-  image_repository_username:
-    description: 'The username for logging into the repository to use for the Docker image.'
+  registry_username:
+    description: 'The username for logging into the registry to use for the Docker image.'
     required: false
     default: ''
-  image_repository_password:
-    description: 'The password for logging into the repository to use for the Docker image.'
+  registry_password:
+    description: 'The password for logging into the registry to use for the Docker image.'
     required: false
     default: ''
   build_args:
@@ -42,8 +42,8 @@ outputs:
   tagged_image:
     description: "The image name (with tag) for the runtime image that was pushed to the image repository."
     value: ${{ steps.prep-vars.outputs.tagged_image }}
-  registry_domain:
-    description: "The domain of the registry that the image was pushed to."
+  ecr_domain:
+    description: "The domain of the ECR registry that the image was pushed to."
     value: ${{ steps.prep-vars.outputs.registry_domain }}
 
 runs:
@@ -68,10 +68,10 @@ runs:
         COMMIT_HASH_SHORT=$(echo "${{ github.sha }}" | head -c7)
         TAG="${COMMIT_HASH_SHORT}-${{ github.run_id }}-${{ github.run_attempt }}"
         echo ::set-output name=commit_hash_short::"$COMMIT_HASH_SHORT"
-        echo ::set-output name=registry_domain::"$( cut -d '/' -f 1 <<< "${{ inputs.image_repository_url }}" )"
-        echo ::set-output name=repository_name::"$( cut -d '/' -f 2- <<< "${{ inputs.image_repository_url }}" )"
         echo ::set-output name=tag::"${TAG}"
-        echo ::set-output name=tagged_image::"${{ inputs.image_repository_url }}:${TAG}"
+        echo ::set-output name=registry_domain::"$( cut -d '/' -f 1 <<< "${{ inputs.ecr_repository_url }}" )"
+        echo ::set-output name=repository_name::"$( cut -d '/' -f 2- <<< "${{ inputs.ecr_repository_url }}" )"
+        echo ::set-output name=tagged_image::"${{ inputs.ecr_repository_url }}:${TAG}"
 
     # Set up QEMU for multi-architecture builds
     - name: Set up QEMU
@@ -88,21 +88,20 @@ runs:
 
     # Login to the image repository
     - name: Login to Image Repository
-      if: inputs.image_repository_url != ''
+      if: inputs.ecr_repository_url != ''
       uses: docker/login-action@v2
       with:
         registry: "${{ steps.prep-vars.outputs.registry_domain }}"
-        username: "${{ inputs.image_repository_username }}"
-        password: "${{ inputs.image_repository_password }}"
+        username: "${{ inputs.registry_username }}"
+        password: "${{ inputs.registry_password }}"
 
     # Prepare metadata for the image
     - name: Docker meta
       id: docker_meta
       uses: docker/metadata-action@v4
       with:
-        # Create both local and remote images
         images: |
-          name=${{ inputs.image_repository_url }},enable=${{ inputs.image_repository_url != '' }}
+          name=${{ inputs.ecr_repository_url }},enable=${{ inputs.ecr_repository_url != '' }}
         # Generate Docker tags based on the following events/attributes
         tags: |
           type=ref,event=tag
@@ -127,8 +126,6 @@ runs:
         context: ${{ inputs.source_directory }}
         # Use BuildX as the builder
         builder: ${{ steps.buildx.outputs.name }}
-        # Push it if it's not a PR and a remote repository was provided
-        push: ${{ github.event_name != 'pull_request' }}
         # Add tags as computed by the meta action
         tags: ${{ steps.docker_meta.outputs.tags }}
         # Add metadata in labels
