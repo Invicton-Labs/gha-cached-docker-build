@@ -127,6 +127,8 @@ runs:
         context: ${{ inputs.source_directory }}
         # Use BuildX as the builder
         builder: ${{ steps.buildx.outputs.name }}
+        # Push if a registry was provided
+        push: ${{ inputs.ecr_repository_url != '' }}
         # Add tags as computed by the meta action
         tags: ${{ steps.docker_meta.outputs.tags }}
         # Add metadata in labels
