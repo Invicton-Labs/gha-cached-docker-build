@@ -72,14 +72,7 @@ runs:
         echo ::set-output name=registry_domain::"$( cut -d '/' -f 1 <<< "${{ inputs.ecr_repository_url }}" )"
         echo ::set-output name=repository_name::"$( cut -d '/' -f 2- <<< "${{ inputs.ecr_repository_url }}" )"
         echo ::set-output name=tagged_image::"${{ inputs.ecr_repository_url }}:${TAG}"
-
-    # Only prepare the image name for pushing if one was set
-    - name: Prepare Image Name
-      id: image_name
-      if: inputs.ecr_repository_url != ''
-      shell: bash
-      run: |
-        echo ::set-output name=image_name_config::"name=${{ inputs.ecr_repository_url }}"
+        echo ::set-output name=image_name::"$( if [ '${{ inputs.ecr_repository_url }}' != '' ]; then echo '${{ inputs.ecr_repository_url }}'; else echo 'placeholder'; fi)"
 
     # Set up QEMU for multi-architecture builds
     - name: Set up QEMU
@@ -109,7 +102,7 @@ runs:
       uses: docker/metadata-action@v4
       with:
         images: |
-          ${{ steps.image_name.outputs.image_name_config }}
+          name=${{ steps.prep-vars.outputs.image_name }},enable=${{ inputs.ecr_repository_url != '' }}
         # Generate Docker tags based on the following events/attributes
         tags: |
           type=ref,event=tag
