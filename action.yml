@@ -67,12 +67,12 @@ runs:
       run: |
         COMMIT_HASH_SHORT=$(echo "${{ github.sha }}" | head -c7)
         TAG="${COMMIT_HASH_SHORT}-${{ github.run_id }}-${{ github.run_attempt }}"
-        echo ::set-output name=commit_hash_short::"$COMMIT_HASH_SHORT"
-        echo ::set-output name=tag::"${TAG}"
-        echo ::set-output name=registry_domain::"$( cut -d '/' -f 1 <<< "${{ inputs.ecr_repository_url }}" )"
-        echo ::set-output name=repository_name::"$( cut -d '/' -f 2- <<< "${{ inputs.ecr_repository_url }}" )"
-        echo ::set-output name=tagged_image::"${{ inputs.ecr_repository_url }}:${TAG}"
-        echo ::set-output name=image_name::"$( if [ '${{ inputs.ecr_repository_url }}' != '' ]; then echo '${{ inputs.ecr_repository_url }}'; else echo 'placeholder'; fi)"
+        echo "commit_hash_short=$COMMIT_HASH_SHORT" >> $GITHUB_OUTPUT
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+        echo "registry_domain=$( cut -d '/' -f 1 <<< "${{ inputs.ecr_repository_url }}" )" >> $GITHUB_OUTPUT
+        echo "repository_name=$( cut -d '/' -f 2- <<< "${{ inputs.ecr_repository_url }}" )" >> $GITHUB_OUTPUT
+        echo "tagged_image=${{ inputs.ecr_repository_url }}:${TAG}" >> $GITHUB_OUTPUT
+        echo "image_name=$( if [ '${{ inputs.ecr_repository_url }}' != '' ]; then echo '${{ inputs.ecr_repository_url }}'; else echo 'placeholder'; fi)" >> $GITHUB_OUTPUT
 
     # Set up QEMU for multi-architecture builds
     - name: Set up QEMU
